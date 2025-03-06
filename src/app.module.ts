@@ -17,6 +17,7 @@ import { ListModule } from "./domains/list/list.module";
 import { NotificationsModule } from "./domains/notifications/notifications.module";
 import { UserModule } from "./domains/user/user.module";
 import {AuthMiddleware} from "./middlewares/auth/auth.middleware";
+import { AuthModule } from './middlewares/auth/auth.module';
 
 dotenv.config()
 
@@ -45,7 +46,8 @@ dotenv.config()
     CommentModule,
     ListModule,
     NotificationsModule,
-    UserModule
+    UserModule,
+    AuthModule
   ],
   controllers: [AppController],
   providers: [AppService],

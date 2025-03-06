@@ -157,8 +157,10 @@ export class BoardService {
     file: Express.Multer.File,
   ) {
     if (!createBoardDto.backgroundId) {
+      console.log(createBoardDto);
       const date = new Date();
       //upload file
+      console.log('asdfdafassdasdf');
       const { data: background, error: backgroundError } =
         await this.supabase.client.storage
           .from('background')
@@ -201,6 +203,7 @@ export class BoardService {
           backgroundId: backgroundData.id,
         })
         .select();
+      console.log(boardError);
 
       return board[0];
     } else {
