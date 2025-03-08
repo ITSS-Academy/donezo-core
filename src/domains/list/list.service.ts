@@ -101,11 +101,12 @@ export class ListService {
           this.getAssignedUsers(card.id),
           this.getLaBelCards(card.id),
         ]).then((results) => {
-          card.assignedUsers = results[0];
+          card.members = results[0];
           card.labels = results[1];
         });
       }
     }
+
     return lists;
   }
 
@@ -276,7 +277,7 @@ export class ListService {
           this.getAssignedUsers(card.id),
           this.getLaBelCards(card.id),
         ]).then((results) => {
-          card.assignedUsers = results[0];
+          card.members = results[0];
           card.labels = results[1];
           console.log(card);
         });
@@ -338,7 +339,7 @@ export class ListService {
             this.getAssignedUsers(card.id),
             this.getLaBelCards(card.id),
           ]).then((results) => {
-            card.assignedUsers = results[0];
+            card.members = results[0];
             card.labels = results[1];
           });
         }),
@@ -355,7 +356,23 @@ export class ListService {
     if (error) {
       throw new BadRequestException(error.message);
     }
-    return data;
+
+    //get label data
+    const promises = data.map(async (label) => {
+      const { data: labelData, error } = await this.supbaseService.client
+        .from('board_label')
+        .select()
+        .eq('id', label.boardLabelId)
+        .single();
+      if (error) {
+        throw new BadRequestException(error.message);
+      }
+      return labelData;
+    });
+
+    const labelData = await Promise.all(promises);
+
+    return labelData;
   }
 
   async getAssignedUsers(cardId: string) {
@@ -366,6 +383,22 @@ export class ListService {
     if (error) {
       throw new BadRequestException(error.message);
     }
-    return data;
+
+    //get user data
+    const promises = data.map(async (user) => {
+      const { data: userData, error } = await this.supbaseService.client
+        .from('user')
+        .select()
+        .eq('id', user.user_id)
+        .single();
+      if (error) {
+        throw new BadRequestException(error.message);
+      }
+      return userData;
+    });
+
+    const userData = await Promise.all(promises);
+
+    return userData;
   }
 }

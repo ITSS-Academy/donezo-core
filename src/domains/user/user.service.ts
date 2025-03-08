@@ -21,10 +21,10 @@ export class UserService {
 
   async getUserById(userId: string) {
     const { data, error } = await this.supabase.client
-        .from('user')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      .from('user')
+      .select('*')
+      .eq('id', userId)
+      .single();
     if (error) {
       throw new BadRequestException(error.message);
     }

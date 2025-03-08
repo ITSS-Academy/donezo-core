@@ -39,7 +39,7 @@ export class ListController {
   @Put('update-list/card')
   updateListCard(
     @Body()
-    req: {
+      req: {
       card: string;
       listId: string;
       position: number;
