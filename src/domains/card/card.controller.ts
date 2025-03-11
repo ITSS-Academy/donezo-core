@@ -6,7 +6,7 @@ import {
   Put,
   Patch,
   Param,
-  Delete,
+  Delete, Req,
 } from '@nestjs/common';
 import { CardService } from './card.service';
 import { CreateCardDto } from './dto/create-card.dto';
@@ -22,14 +22,22 @@ export class CardController {
     return this.cardService.create(req.title, req.listId);
   }
 
-  @Put('/:id')
-  updateCard(@Param('id') id: string, @Body() req: UpdateCardDto) {
-    return this.cardService.updateCard(id, req);
+  @Put()
+  updateCard(@Body() req: any) {
+    console.log(req);
+    return this.cardService.updateCard(req);
   }
 
   @Post('/add-new-member')
-  addNewMember(@Body() req: { cardId: string; userId: string }) {
-    return this.cardService.addNewMember(req.cardId, req.userId);
+  addNewMember(
+    @Body() body: { cardId: string; userId: string },
+    @Req() req: any,
+  ) {
+    return this.cardService.addNewMember(
+      body.cardId,
+      body.userId,
+      req.user.uid,
+    );
   }
 
   @Put('/position')
@@ -47,8 +55,29 @@ export class CardController {
     return this.cardService.remove(id);
   }
 
-  @Delete('/remove-member')
-  removeMember(@Body() req: { cardId: string; userId: string }) {
-    return this.cardService.removeMember(req.cardId, req.userId);
+  @Put('/remove-member')
+  removeMember(
+    @Body() body: { cardId: string; userId: string },
+    @Req() req: any,
+  ) {
+    return this.cardService.removeMember(
+      body.cardId,
+      body.userId,
+      req.user.uid,
+    );
+  }
+
+  @Get('get-all-by-uid/:offset/:limit')
+  findAllByUid(
+    @Param('offset') offset: number,
+    @Param('limit') limit: number,
+    @Req() req: any,
+  ) {
+    return this.cardService.findAllByUid(req.user.uid, offset, limit);
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.cardService.findOne(id);
   }
 }

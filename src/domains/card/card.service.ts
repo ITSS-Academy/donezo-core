@@ -45,21 +45,40 @@ export class CardService {
     return this.supabase.client.from('card').delete().eq('id', id);
   }
 
-  async updateCard(id: string, card: UpdateCardDto) {
+  async updateCard(card: UpdateCardDto) {
     if (!card) {
       throw new BadRequestException('Title is required');
     }
-    const { data, error } = await this.supabase.client
-      .from('card')
-      .update(card)
-      .eq('id', id)
-      .select();
 
-    if (error) {
-      throw new BadRequestException(error.message);
+    //update and get listId promise.all
+    const promises = [
+      this.supabase.client
+        .from('card')
+        .update({
+          title: card.title,
+          description: card.description,
+          dueDate: card.dueDate,
+        })
+        .eq('id', card.id)
+        .select(),
+      this.supabase.client
+        .from('card')
+        .select('listId')
+        .eq('id', card.id)
+        .single(),
+    ];
+
+    let [data, listData] = await Promise.all(promises);
+
+    if (data.error) {
+      throw new BadRequestException(data.error.message);
     }
 
-    return data;
+    if (listData.error) {
+      throw new BadRequestException(listData.error.message);
+    }
+
+    return data.data[0];
   }
 
   async updateDescription(id: string, description: string) {
@@ -98,20 +117,20 @@ export class CardService {
     return Promise.all(promises);
   }
 
-  async addNewMember(cardId: string, userId: string) {
+  async addNewMember(cardId: string, userId: string, senderId: string) {
     const { data: exitingMemberData, error: exitingMemberDataError } =
       await this.supabase.client
         .from('user_cards')
         .select()
-        .eq('cardId', cardId)
-        .eq('userId', userId);
+        .eq('card_id', cardId)
+        .eq('user_id', userId);
     if (exitingMemberData.length > 0) {
       throw new BadRequestException('User already a member');
     }
 
     const newMember = {
-      cardId,
-      userId,
+      card_id: cardId,
+      user_id: userId,
     };
 
     const { data, error } = await this.supabase.client
@@ -122,18 +141,152 @@ export class CardService {
       throw new BadRequestException(error.message);
     }
 
-    return data;
+    //get new member
+    const { data: memberData, error: memberError } =
+      await this.supabase.client
+        .from('user')
+        .select()
+        .eq('id', userId)
+        .single();
+
+    if (memberError) {
+      throw new BadRequestException(memberError.message);
+    }
+
+
+
+    return memberData;
   }
 
-  async removeMember(cardId: string, userId: string) {
+  async removeMember(cardId: string, userId: string, senderId: string) {
     const { data, error } = await this.supabase.client
       .from('user_cards')
       .delete()
-      .eq('cardId', cardId)
-      .eq('userId', userId);
+      .eq('card_id', cardId)
+      .eq('user_id', userId);
     if (error) {
       throw new BadRequestException(error.message);
     }
+
     return data;
+  }
+
+  async findAllByUid(uid, offset: number, limit: number) {
+    const newPage = offset + limit - 1;
+    const { data: cards, error: fetchError } = await this.supabase.client
+      .from('user_cards')
+      .select('cardId')
+      .eq('userId', uid)
+      .order('createdAt', { ascending: false })
+      .range(offset, newPage);
+
+    if (fetchError) {
+      throw new BadRequestException(fetchError.message);
+    }
+
+    if (!cards || cards.length === 0) {
+      return [];
+    }
+
+    const promises = cards.map(async (card) => {
+      const { data: cardData, error } = await this.supabase.client
+        .from('card')
+        .select()
+        .eq('id', card.cardId)
+        .single();
+
+      if (error) {
+        throw new BadRequestException(error.message);
+      }
+      return cardData;
+    });
+
+    const cardData = await Promise.all(promises);
+    console.log(cardData);
+
+    return cardData;
+  }
+
+  async findOne(id: string) {
+    const { data: cardData, error: cardError } = await this.supabase.client
+      .from('card')
+      .select('id,title,description,dueDate')
+      .eq('id', id)
+      .single();
+
+    if (cardError) {
+      throw new BadRequestException(cardError.message);
+    }
+
+    const [
+      { data: comments, error: commentError },
+      { data: checklistItems, error: checklistItemError },
+      { data: labels, error: labelError },
+      { data: members, error: memberError },
+      { data: attachments, error: attachmentError },
+    ] = await Promise.all([
+      this.supabase.client.from('comment').select().eq('cardId', id),
+      this.supabase.client
+        .from('checklist_item')
+        .select()
+        .eq('cardId', id)
+        .order('is_completed', { ascending: true }),
+      this.supabase.client
+        .from('labels_cards')
+        .select('boardLabelId')
+        .eq('cardId', id),
+      this.supabase.client
+        .from('user_cards')
+        .select('user_id')
+        .eq('card_id', id),
+      this.supabase.client.from('card_attachment').select().eq('cardId', id),
+    ]);
+
+    if (commentError) throw new BadRequestException(commentError.message);
+    if (checklistItemError)
+      throw new BadRequestException(checklistItemError.message);
+    if (labelError) throw new BadRequestException(labelError.message);
+    if (memberError) throw new BadRequestException(memberError.message);
+    if (attachmentError) throw new BadRequestException(attachmentError.message);
+
+    //get label and member
+    const labelPromises = labels.map((label) => {
+      return this.supabase.client
+        .from('board_label')
+        .select()
+        .eq('id', label.boardLabelId)
+        .single();
+    });
+
+    const memberPromises = members.map((member) => {
+      return this.supabase.client
+        .from('user')
+        .select()
+        .eq('id', member.user_id)
+        .single();
+    });
+
+    let [labelData, memberData] = await Promise.all([
+      Promise.all(labelPromises),
+      Promise.all(memberPromises),
+    ]);
+
+    labelData = labelData.map((label) => label.data);
+    memberData = memberData.map((member) => member.data);
+    checklistItems.map((item) => {
+      item.isCompleted = item.is_completed;
+    });
+
+    return {
+      id: cardData.id,
+      title: cardData.title,
+      description: cardData.description,
+      dueDate: cardData.dueDate,
+      comments,
+      checklistItems,
+      labels: labelData,
+      members: memberData,
+      attachments,
+    };
   }
 }

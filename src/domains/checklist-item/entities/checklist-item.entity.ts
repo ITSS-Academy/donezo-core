@@ -7,7 +7,7 @@ export class ChecklistItem {
   id: number;
 
   @Column('text')
-  name: string;
+  title: string;
 
   @ManyToOne(() => Card, (card) => card.checklistItems, { onDelete: 'CASCADE' })
   card: Card;

@@ -22,11 +22,17 @@ export class BoardLabelController {
   }
 
   @Post('add-label-to-card')
-  addLabelToCard(@Body() req: { cardId: string; labelId: string }) {
-    return this.boardLabelService.addLabelToCard(req.cardId, req.labelId);
+  addLabelToCard(@Body() req: { cardId: string; labelIds: string[] }) {
+    console.log(req);
+    return this.boardLabelService.addLabelToCard(req.cardId, req.labelIds);
   }
 
   @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.boardLabelService.findOne(id);
+  }
+
+  @Get('get-all-in-board/:id')
   findAll(@Param('id') id: string) {
     return this.boardLabelService.findAll(id);
   }

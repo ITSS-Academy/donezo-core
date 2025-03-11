@@ -20,7 +20,9 @@ export class BoardLabelService {
     }
     const { data, error: insertError } = await this.supabase.client
       .from('board_label')
-      .insert(createBoardLabelDto);
+      .insert(createBoardLabelDto)
+      .select()
+      .single();
     if (insertError) {
       throw new BadRequestException(insertError.message);
     }
@@ -50,8 +52,17 @@ export class BoardLabelService {
     return data;
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} boardLabel`;
+  async findOne(id: string) {
+    const { data, error } = await this.supabase.client
+      .from('board_label')
+      .select()
+      .eq('id', id)
+      .single();
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    return data;
   }
 
   async update(updateBoardLabelDto: UpdateBoardLabelDto) {
@@ -77,22 +88,50 @@ export class BoardLabelService {
     return data;
   }
 
-  async addLabelToCard(cardId: string, boardLabelId: string) {
-    const { data: exitingCardLabel, error } = await this.supabase.client
-      .from('labels_cards')
-      .select()
-      .eq('cardId', cardId)
-      .eq('boardLabelId', boardLabelId);
-    if (error) {
-      throw new BadRequestException(error.message);
-    }
-    if (exitingCardLabel.length > 0) {
-      throw new BadRequestException('Label already added to card');
+  async addLabelToCard(cardId: string, boardLabelIds: string[]) {
+    const checkPromises = boardLabelIds.map(async (labelId) => {
+      const { data, error } = await this.supabase.client
+        .from('labels_cards')
+        .select()
+        .eq('cardId', cardId)
+        .eq('boardLabelId', labelId);
+
+      if (error) throw new BadRequestException(error.message);
+      if (data.length > 0)
+        throw new BadRequestException(`Label ${labelId} already added to card`);
+      return true;
+    });
+
+    const checkResults = await Promise.all(checkPromises);
+    for (let checkResult of checkResults) {
+      if (!checkResult) {
+        throw new BadRequestException('Error in adding label to card');
+      }
     }
 
-    return this.supabase.client
-      .from('labels_cards')
-      .insert({ cardId, boardLabelId })
-      .select();
+    const insertPromises = boardLabelIds.map(async (labelId) => {
+      return this.supabase.client
+        .from('labels_cards')
+        .insert({ cardId, boardLabelId: labelId })
+        .select()
+        .single();
+    });
+
+    let labels = await Promise.all(insertPromises);
+
+    const labelPromises = labels.map(async (label) => {
+      const { data, error } = await this.supabase.client
+        .from('board_label')
+        .select()
+        .eq('id', label.data.boardLabelId)
+        .single();
+
+      if (error) throw new BadRequestException(error.message);
+      return data;
+    });
+
+    const labelData = await Promise.all(labelPromises);
+
+    return { cardId, labelData };
   }
 }

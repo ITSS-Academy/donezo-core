@@ -100,14 +100,48 @@ export class ListService {
         await Promise.all([
           this.getAssignedUsers(card.id),
           this.getLaBelCards(card.id),
+          this.getCommentsCount(card.id),
+          this.getChecklistItems(card.id),
         ]).then((results) => {
           card.members = results[0];
           card.labels = results[1];
+          card.commentsCount = results[2];
+          card.checklistItems = results[3];
         });
       }
     }
 
     return lists;
+  }
+
+  async getChecklistItems(cardId: string) {
+    const { data, error } = await this.supbaseService.client
+      .from('checklist_item')
+      .select('id, title, is_completed')
+      .eq('cardId', cardId)
+      .order('is_completed', { ascending: true });
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+    return data.map((item) => {
+      return {
+        id: item.id,
+        title: item.title,
+        isCompleted: item.is_completed,
+      };
+    });
+  }
+
+  async getCommentsCount(cardId: string) {
+    const { data, error } = await this.supbaseService.client
+      .from('comment')
+      .select('id', { count: 'exact' })
+      .eq('cardId', cardId);
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    return data.length;
   }
 
   async createNewLists(createListDto: string, boardId: string) {
