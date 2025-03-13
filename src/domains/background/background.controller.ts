@@ -7,11 +7,12 @@ import {
   Param,
   Delete,
   Put,
-  UploadedFile,
+  UploadedFile, UseInterceptors,
 } from '@nestjs/common';
 import { BackgroundService } from './background.service';
 import { CreateBackgroundDto } from './dto/create-background.dto';
 import { UpdateBackgroundDto } from './dto/update-background.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('background')
 export class BackgroundController {
@@ -23,14 +24,12 @@ export class BackgroundController {
   }
 
   @Put('upload')
+  @UseInterceptors(FileInterceptor('background'))
   changeBackground(
-    @Body() backgroundId: { backgroundId: string },
-    @UploadedFile() file: Express.Multer.File,
+    @Body() background: { backgroundId?: string; boardId: string },
+    @UploadedFile() file?: Express.Multer.File,
   ) {
-    return this.backgroundService.changBackground(
-      file,
-      backgroundId.backgroundId,
-    );
+    return this.backgroundService.changBackground(file, background);
   }
 
   @Get(':id')

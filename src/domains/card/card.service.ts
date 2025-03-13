@@ -386,58 +386,97 @@ export class CardService {
     return data;
   }
 
-  async getCardByUser(uid: string) {
-    const { data: cardIds, error } = await this.supabase.client
-      .from('user_cards')
-      .select('card_id')
-      .eq('user_id', uid)
+  async getCardByUser(uid: string){
+    // Lấy tất cả các board của user
+    const { data: boards, error: boardError } = await this.supabase.client
+      .from('board')
+      .select('id, name')
+      .eq('ownerId', uid);
 
-    if (error) {
-      throw new BadRequestException(error.message);
+    if (boardError) {
+      throw new BadRequestException(boardError.message);
     }
 
-    //get cardData
-    const cardPromises = cardIds.map((card) => {
-      return this.supabase.client
+    if (!boards?.length) return []; // Không có board nào -> trả về []
+
+    // Lấy tất cả danh sách (list) từ các board
+    const listPromises = boards.map(async (board) => {
+      const { data: lists, error: listError } = await this.supabase.client
+        .from('list')
+        .select('id')
+        .eq('boardId', board.id);
+
+      if (listError) {
+        throw new BadRequestException(listError.message);
+      }
+
+      return lists?.map((list) => ({
+        id: list.id,
+        board: { id: board.id, name: board.name }, // Gán thông tin board vào list
+      })) ?? [];
+    });
+
+    const listsData = (await Promise.all(listPromises)).flat(); // Flatten danh sách lists
+
+    if (!listsData.length) return []; // Không có list nào -> trả về []
+
+    // Lấy tất cả các card từ danh sách, kèm theo thông tin board
+    const cardPromises = listsData.map(async ({ id: listId, board }) => {
+      const { data: cards, error: cardError } = await this.supabase.client
         .from('card')
-        .select()
-        .eq('id', card.card_id)
-        .single();
+        .select('id, title, description, dueDate')
+        .eq('listId', listId);
+
+      if (cardError) {
+        throw new BadRequestException(cardError.message);
+      }
+
+      return cards?.map((card) => ({
+        ...card,
+        board, // Gán thông tin board vào card
+      })) ?? [];
     });
 
-    const cardData = await Promise.all(cardPromises);
+    const cardData = (await Promise.all(cardPromises)).flat(); // Flatten danh sách cards
 
-    //get labelcards data, list data by promise.all
-    const promises = cardData.map(async (card) => {
-      const labelCards = await this.getLaBelCards(card.data.id);
-      const checklistItems = await this.getChecklistItems(card.data.id);
-      const assignedUsers = await this.getAssignedUsers(card.data.id);
-      const listData = await this.getListIdById(card.data.listId);
+    //get label data
+    const labelPromises = cardData.map(async (card) => {
+      const { data: labels, error } = await this.supabase.client
+        .from('labels_cards')
+        .select('boardLabelId')
+        .eq('cardId', card.id);
+      if (error) {
+        throw new BadRequestException(error.message);
+      }
 
-      return {
-        ...card.data,
-        labels: labelCards,
-        checklistItems: checklistItems,
-        members: assignedUsers,
-        list: listData,
-      };
+      //get label data
+      const promises = labels.map(async (label) => {
+        const { data: labelData, error } = await this.supabase.client
+          .from('board_label')
+          .select()
+          .eq('id', label.boardLabelId)
+          .single();
+        if (error) {
+          throw new BadRequestException(error.message);
+        }
+        return labelData;
+      });
+
+      const labelData = await Promise.all(promises);
+
+      return labelData;
     });
 
-    let finalData = await Promise.all(promises);
+    const labelData = await Promise.all(labelPromises);
 
-    const getBoardPromises = finalData.map(async (card) => {
-      const boardData = await this.getBoardById(card.list.boardId);
+    const cardDataWithLabel = cardData.map((card, index) => {
       return {
         ...card,
-        board: boardData,
+        labels: labelData[index],
       };
-    });
+    })
 
-    finalData = await Promise.all(getBoardPromises);
-
-    console.log('finalData', finalData);
-
-    return finalData;
+    return cardDataWithLabel;
   }
 
   async getBoardById(boardId: string) {
