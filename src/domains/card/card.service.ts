@@ -153,7 +153,7 @@ export class CardService {
       throw new BadRequestException(memberError.message);
     }
 
-
+    //create notification
 
     return memberData;
   }
@@ -288,5 +288,263 @@ export class CardService {
       members: memberData,
       attachments,
     };
+  }
+
+  async filterCards(labelIds: string[], memberIds: string[], boardId: string) {
+    const { data: listData, error: listError } = await this.supabase.client
+      .from('list')
+      .select('id')
+      .eq('boardId', boardId);
+
+    if (listError) {
+      return [];
+    }
+
+    const listIds = listData.map((list) => list.id);
+    if (listIds.length === 0) return [];
+
+    let cardIdsFromLabels = new Set<string>();
+    let cardIdsFromMembers = new Set<string>();
+
+    if (labelIds.length > 0) {
+      const { data: labelCards, error: labelError } =
+        await this.supabase.client
+          .from('labels_cards')
+          .select('cardId, boardLabelId')
+          .in('boardLabelId', labelIds);
+
+      if (labelError) {
+        return [];
+      }
+
+      const labelCardCount = new Map<string, number>();
+      labelCards.forEach((card) => {
+        labelCardCount.set(
+          card.cardId,
+          (labelCardCount.get(card.cardId) || 0) + 1,
+        );
+      });
+
+      // Chỉ lấy những card có **tất cả** labelIds
+      cardIdsFromLabels = new Set(
+        [...labelCardCount.entries()]
+          .filter(([_, count]) => count === labelIds.length)
+          .map(([cardId]) => cardId),
+      );
+    }
+
+    if (memberIds.length > 0) {
+      const { data: memberCards, error: memberError } =
+        await this.supabase.client
+          .from('user_cards')
+          .select('card_id, user_id')
+          .in('user_id', memberIds);
+
+      if (memberError) {
+        return [];
+      }
+
+      const memberCardCount = new Map<string, number>();
+      memberCards.forEach((card) => {
+        memberCardCount.set(
+          card.card_id,
+          (memberCardCount.get(card.card_id) || 0) + 1,
+        );
+      });
+
+      cardIdsFromMembers = new Set(
+        [...memberCardCount.entries()]
+          .filter(([_, count]) => count === memberIds.length)
+          .map(([cardId]) => cardId),
+      );
+    }
+
+    let finalCardIds: string[] = [];
+    if (labelIds.length > 0 && memberIds.length > 0) {
+      finalCardIds = [...cardIdsFromLabels].filter((id) =>
+        cardIdsFromMembers.has(id),
+      );
+    } else if (labelIds.length > 0) {
+      finalCardIds = [...cardIdsFromLabels];
+    } else if (memberIds.length > 0) {
+      finalCardIds = [...cardIdsFromMembers];
+    }
+
+    if (finalCardIds.length === 0) return [];
+
+    // Truy vấn card dựa trên listId và finalCardIds
+    const { data, error } = await this.supabase.client
+      .from('card')
+      .select('id')
+      .in('id', finalCardIds)
+      .in('listId', listIds);
+
+    if (error) {
+      return [];
+    }
+
+    return data;
+  }
+
+  async getCardByUser(uid: string) {
+    const { data: cardIds, error } = await this.supabase.client
+      .from('user_cards')
+      .select('card_id')
+      .eq('user_id', uid)
+
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    //get cardData
+    const cardPromises = cardIds.map((card) => {
+      return this.supabase.client
+        .from('card')
+        .select()
+        .eq('id', card.card_id)
+        .single();
+    });
+
+    const cardData = await Promise.all(cardPromises);
+
+    //get labelcards data, list data by promise.all
+    const promises = cardData.map(async (card) => {
+      const labelCards = await this.getLaBelCards(card.data.id);
+      const checklistItems = await this.getChecklistItems(card.data.id);
+      const assignedUsers = await this.getAssignedUsers(card.data.id);
+      const listData = await this.getListIdById(card.data.listId);
+
+      return {
+        ...card.data,
+        labels: labelCards,
+        checklistItems: checklistItems,
+        members: assignedUsers,
+        list: listData,
+      };
+    });
+
+    let finalData = await Promise.all(promises);
+
+    const getBoardPromises = finalData.map(async (card) => {
+      const boardData = await this.getBoardById(card.list.boardId);
+      return {
+        ...card,
+        board: boardData,
+      };
+    });
+
+    finalData = await Promise.all(getBoardPromises);
+
+    console.log('finalData', finalData);
+
+    return finalData;
+  }
+
+  async getBoardById(boardId: string) {
+    const { data, error } = await this.supabase.client
+      .from('board')
+      .select()
+      .eq('id', boardId)
+      .single();
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+    return data;
+  }
+
+  async getListIdById(listId: string) {
+    const { data, error } = await this.supabase.client
+      .from('list')
+      .select('*')
+      .eq('id', listId)
+      .single();
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+    return data;
+  }
+
+  async getLaBelCards(cardId: string) {
+    const { data, error } = await this.supabase.client
+      .from('labels_cards')
+      .select('boardLabelId')
+      .eq('cardId', cardId);
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    //get label data
+    const promises = data.map(async (label) => {
+      const { data: labelData, error } = await this.supabase.client
+        .from('board_label')
+        .select()
+        .eq('id', label.boardLabelId)
+        .single();
+      if (error) {
+        throw new BadRequestException(error.message);
+      }
+      return labelData;
+    });
+
+    const labelData = await Promise.all(promises);
+
+    return labelData;
+  }
+
+  async getCommentsCount(cardId: string) {
+    const { data, error } = await this.supabase.client
+      .from('comment')
+      .select('id', { count: 'exact' })
+      .eq('cardId', cardId);
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    return data.length;
+  }
+
+  async getChecklistItems(cardId: string) {
+    const { data, error } = await this.supabase.client
+      .from('checklist_item')
+      .select('id, title, is_completed')
+      .eq('cardId', cardId)
+      .order('is_completed', { ascending: true });
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+    return data.map((item) => {
+      return {
+        id: item.id,
+        title: item.title,
+        isCompleted: item.is_completed,
+      };
+    });
+  }
+
+  async getAssignedUsers(cardId: string) {
+    const { data, error } = await this.supabase.client
+      .from('user_cards')
+      .select('user_id')
+      .eq('card_id', cardId);
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    //get user data
+    const promises = data.map(async (user) => {
+      const { data: userData, error } = await this.supabase.client
+        .from('user')
+        .select()
+        .eq('id', user.user_id)
+        .single();
+      if (error) {
+        throw new BadRequestException(error.message);
+      }
+      return userData;
+    });
+
+    const userData = await Promise.all(promises);
+
+    return userData;
   }
 }

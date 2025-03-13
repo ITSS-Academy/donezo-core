@@ -52,6 +52,7 @@ export class BoardController {
 
   @Get('get-all-by-uid')
   findAll(@Req() req: any) {
+    console.log(req.user.uid);
     return this.boardService.findAll(req.user.uid);
   }
 
@@ -73,9 +74,9 @@ export class BoardController {
 
   //
   @Post('search')
-  search(@Body() search: { search: string }) {
+  search(@Body() search: { search: string }, @Req() req: any) {
     console.log(search);
-    return this.boardService.search(search.search);
+    return this.boardService.search(search.search, req.user.uid);
   }
 
   //update name

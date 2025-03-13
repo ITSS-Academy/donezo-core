@@ -335,8 +335,8 @@ export class BoardService {
     return data;
   }
 
-  async search(search: string) {
-    // let { data, error } = await this.supabase.client
+  async search(search: string, uid: string) {
+    // let { data, error } = await this.supabase.supabase
     //     .rpc('search_boards', {
     //       search_term: search,
     //     })
@@ -345,10 +345,25 @@ export class BoardService {
     //   throw new BadRequestException(error.message);
     // }
 
-    const { data, error } = await this.supabase.client
-      .from('board')
-      .select()
-      .ilike('name', `%${search}%`);
+    const { data: ownedBoards, error: ownedError } =
+      await this.supabase.client
+        .from('board')
+        .select(`*`)
+        .eq('ownerId', uid)
+        .ilike('name', `%${search}%`);
+
+    const { data: memberBoards, error: memberError } =
+      await this.supabase.client
+        .from('board')
+        .select(`*,board_members!inner(*)`)
+        .eq('board_members.user_id', uid)
+        .ilike('name', `%${search}%`);
+
+    const data = [...(ownedBoards || []), ...(memberBoards || [])];
+
+    if (ownedError || memberError) {
+      console.error(ownedError || memberError);
+    }
 
     return data;
   }

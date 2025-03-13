@@ -25,21 +25,16 @@ export class BackgroundService {
     //   return new BadRequestException(colorError.message);
     // }
 
-    Promise.all([
-      this.supabase.client
-        .from('background')
-        .select('id, fileName, fileLocation')
-        .eq('color', null),
-      this.supabase.client
-        .from('background')
-        .select('id, color')
-        .eq('fileLocation', null),
-    ]).then((values) => {
-      return {
-        images: values[0].data,
-        colors: values[1].data,
-      };
-    });
+    const { data: images, error } = await this.supabase.client
+      .from('background')
+      .select('id, fileName,fileLocation')
+      .eq('isPredefined', true);
+    if (error) {
+      return new BadRequestException(error.message);
+    }
+
+    return images;
+
   }
 
   async findOne(id: string) {
