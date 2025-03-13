@@ -44,13 +44,6 @@ export class User {
   @Column('timestamptz', { default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 
-  @ManyToMany(() => Card, (card) => card.members)
-  @JoinTable({
-    name: 'user_cards',
-    joinColumn: { name: 'user_id', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'card_id', referencedColumnName: 'id' },
-  })
-  cards: Card[];
 
   // @OneToMany(() => Notification, (notification) => notification.user, {
   //   onDelete: 'CASCADE',

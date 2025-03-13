@@ -22,9 +22,6 @@ export class Card {
   @Column('text')
   title: string;
 
-  @ManyToMany(() => User, (user) => user.cards)
-  members: User[];
-
   @Column('text')
   description: string;
 
@@ -48,7 +45,10 @@ export class Card {
   })
   checklistItems: ChecklistItem[];
 
-  @ManyToMany(() => BoardLabel, (boardLabel) => boardLabel.cards)
+  @ManyToMany(() => BoardLabel, (boardLabel) => boardLabel.cards, {
+    onDelete: 'CASCADE',
+    cascade: true,
+  })
   labels: BoardLabel[];
 
   @OneToMany(() => CardAttachment, (cardAttachment) => cardAttachment.card, {
@@ -56,9 +56,4 @@ export class Card {
   })
   cardAttachments: CardAttachment[];
 
-  // @ManyToOne(() => Notification, (notification) => notification.card, {
-  //   onDelete: 'CASCADE',
-  //   cascade: true,
-  // })
-  // notifications: Notification[];
 }
